@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus OS | Pro Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: {} }
+        }
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='50%25' y='57%25' text-anchor='middle' font-size='38' fill='white'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body class="text-slate-100 transition-colors duration-300">
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<div id="app" class="app-shell" :class="{'dark': isDarkMode}">
+    <div v-if="mobileNavOpen" class="nav-backdrop" @click="mobileNavOpen = false" aria-hidden="true"></div>
+    <aside class="side-nav" :class="{ 'mobile-open': mobileNavOpen }" role="navigation" aria-label="Primary sidebar navigation">
+        <div class="brand-row">
+            <div class="brand-icon">⚡</div>
+            <div>
+                <div class="brand-title">Habitfy</div>
+                <div class="brand-sub">PRO SYSTEM</div>
+            </div>
+        </div>
+
+        <div v-for="section in navSections" :key="section.title" class="nav-section">
+            <div class="nav-label">{{ section.title }}</div>
+            <button
+                v-for="item in section.items"
+                :key="item.key"
+                @click="setView(item.key)"
+                class="nav-item"
+                :class="{ 'nav-item-active': currentView === item.key }"
+                :aria-label="'Open ' + item.label + ' view'"
+            >
+                <i class="ph" :class="item.icon"></i>
+                <span>{{ item.label }}</span>
+            </button>
+        </div>
+
+        <div class="side-foot">
+            <div class="side-foot-title">Local Backup</div>
+            <div class="side-foot-sub">Auto-saves on this device</div>
+        </div>
+
+    </aside>
+
+    <main id="main-content" class="main-content" tabindex="-1">
+        <header class="topbar card-glass">
+            <div>
+                <h1 class="page-title">{{ currentViewTitle }}</h1>
+                <p class="page-sub">{{ currentDateLabel }}</p>
+            </div>
+            <div class="topbar-actions">
+                <button class="mobile-nav-btn" @click="toggleMobileNav" aria-label="Toggle sidebar menu">
+                    <i class="ph ph-list"></i>
+                </button>
+                <select v-model="currentYear" class="ctl-select" aria-label="Select year">
+                    <option v-for="y in years" :key="y" :value="y">Year {{ y }}</option>
+                </select>
+                <select v-model="currentMonth" class="ctl-select" aria-label="Select month">
+                    <option v-for="(m, i) in months" :key="i" :value="i">{{ m }}</option>
+                </select>
+                <button class="menu-timer-btn" @click="setView('deep-work')" aria-label="Open Deep Work page">
+                    <span class="menu-timer-dot" :class="timerRunning ? 'menu-timer-dot-on' : ''"></span>
+                    <span class="menu-timer-label">Deep Work</span>
+                    <strong>{{ formattedTime }}</strong>
+                </button>
+                <button class="accent-btn" @click="undoLastAction" :disabled="!undoStack.length" aria-label="Undo last action">Undo</button>
+                <button class="accent-btn" @click="exportData" aria-label="Export backup file">Backup</button>
+            </div>
+        </header>
+
+        <div class="notice card-glass">
+            <i class="ph ph-quotes"></i>
+            <span>Your progress is stored locally. Export a backup anytime and keep your habits in sync across months.</span>
+        </div>
+
+        <section v-if="currentView === 'dashboard'" class="space-y-4">
+            <div class="grid grid-cols-2 gap-3 lg:hidden">
+                <div class="metric-card compact"><span>Today</span><strong>{{ doneToday }}</strong><small>{{ totalHabits }} habits</small></div>
+                <div class="metric-card compact"><span>Progress</span><strong>{{ overallProgress }}%</strong><small>month rate</small></div>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="metric-card"><span>Total Habits</span><strong>{{ totalHabits }}</strong><small>active in this month</small></div>
+                <div class="metric-card"><span>Done Today</span><strong>{{ doneToday }}</strong><small>checks completed</small></div>
+                <div class="metric-card"><span>Avg Rate</span><strong>{{ avgHabitRate }}%</strong><small>month progress</small></div>
+                <div class="metric-card"><span>Max Streak</span><strong>{{ maxStreak }}</strong><small>days in a row</small></div>
+                <div class="metric-card"><span>Deep Work</span><strong>{{ deepWorkHoursLabel }}h</strong><small>{{ deepWorkMinutes }} min · {{ deepWorkSessions }} sessions</small></div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass lg:col-span-2 p-4 hidden lg:block">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Daily Completions</div>
+                            <div class="card-mini">April {{ currentYear }} · trend per day</div>
+                        </div>
+                        <div class="chip chip-success">{{ overallProgress }}%</div>
+                    </div>
+                    <svg class="w-full h-56 mt-2" preserveAspectRatio="none" viewBox="0 0 100 100">
+                        <polygon :points="chartPolygon" fill="url(#gradDash)" opacity="0.62" stroke="#d946ef" stroke-width="1.2"></polygon>
+                        <defs>
+                            <linearGradient id="gradDash" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#9333ea"></stop>
+                                <stop offset="100%" stop-color="#2563eb"></stop>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+
+                <div class="card-glass p-4 hidden lg:block">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Streak Tracker</div>
+                            <div class="card-mini">best run this month</div>
+                        </div>
+                        <div class="chip chip-warning">LIVE</div>
+                    </div>
+                    <div class="text-4xl font-black text-amber-400 mt-3">{{ maxStreak }}</div>
+                    <div class="grid grid-cols-5 gap-2 mt-4">
+                        <div v-for="n in 20" :key="n" class="h-7 rounded-xl text-[10px] flex items-center justify-center" :class="n <= maxStreak ? 'bg-gradient-to-r from-orange-500 to-amber-400 text-slate-950' : 'bg-slate-900 text-slate-500'">{{ n }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 lg:hidden">
+                <div class="card-glass p-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Trend Snapshot</div>
+                            <div class="card-mini">monthly movement at a glance</div>
+                        </div>
+                        <div class="chip chip-success">{{ overallProgress }}%</div>
+                    </div>
+                    <div class="trend-bars mt-4">
+                        <div v-for="(value, idx) in monthlyProgressSeries.slice(0, 4)" :key="'mobile-trend-'+idx" class="trend-row">
+                            <span>{{ months[idx].slice(0,3) }}</span>
+                            <div class="trend-bar">
+                                <div class="trend-fill" :style="{ width: value + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+                <div class="card-glass p-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Mood & Energy Map</div>
+                            <div class="card-mini">daily mood snapshot</div>
+                        </div>
+                        <div class="chip chip-muted">APR {{ currentYear }}</div>
+                    </div>
+                    <div class="mood-grid mt-4">
+                        <button
+                            v-for="day in moodDays"
+                            :key="'mood-'+day"
+                            type="button"
+                            class="mood-tile"
+                            :class="getMoodClass(day)"
+                            @click="cycleMood(day)"
+                            :aria-label="'Set mood for day ' + day + '. Current mood: ' + getMoodLabel(day)"
+                        >
+                            <span>{{ day }}</span>
+                        </button>
+                    </div>
+                    <div class="mood-legend mt-4">
+                        <button v-for="item in moodLegend" :key="'legend-'+item.value" class="chip chip-muted" @click="setTodayMood(item.value)" :aria-label="'Set today mood to ' + item.label">{{ item.label }}</button>
+                    </div>
+                </div>
+
+                <div class="card-glass p-4 hidden lg:block">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Monthly Progress Trend</div>
+                            <div class="card-mini">across the last 12 months</div>
+                        </div>
+                        <div class="chip chip-muted">Yearly view</div>
+                    </div>
+                    <div class="trend-bars mt-4">
+                        <div v-for="(value, idx) in monthlyProgressSeries" :key="'trend-'+idx" class="trend-row">
+                            <span>{{ months[idx].slice(0,3) }}</span>
+                            <div class="trend-bar">
+                                <div class="trend-fill" :style="{ width: value + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass p-4 lg:col-span-2">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Today’s Habits</div>
+                            <div class="card-mini">quick toggles for the current day</div>
+                        </div>
+                        <div class="chip chip-success">{{ doneToday }}/{{ totalHabits || 0 }}</div>
+                    </div>
+                    <div class="space-y-2 mt-3">
+                        <div v-for="(habit, idx) in activeData.dailyHabits" :key="'dash-h-'+idx" class="habit-row">
+                            <div>
+                                <div class="font-semibold text-sm">{{ habit.name || 'Untitled Habit' }}</div>
+                                <div class="text-xs text-slate-400">{{ habitCompletedCount(habit) }}/{{ daysInMonth }} completed</div>
+                            </div>
+                            <input type="checkbox" class="chk-base chk-w0" :checked="todayIndex >= 0 ? habit.days[todayIndex] : false" @change="todayIndex >= 0 && handleCheck($event, habit, todayIndex + 1)" :aria-label="'Toggle today status for ' + (habit.name || 'habit')">
+                        </div>
+                    </div>
+                </div>
+                <div class="card-glass p-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Quick Actions</div>
+                            <div class="card-mini">fast navigation</div>
+                        </div>
+                    </div>
+                    <button class="quick-btn" @click="setView('daily')">Daily Habits</button>
+                    <button class="quick-btn" @click="setView('deep-work')">Deep Work</button>
+                    <button class="quick-btn" @click="setView('weekly')">Weekly Habits</button>
+                    <button class="quick-btn" @click="setView('monthly')">Monthly Habits</button>
+                    <button class="quick-btn" @click="setView('yearly')">Yearly Overview</button>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+                <div class="card-glass p-4">
+                    <div class="card-title">Achievement Badges</div>
+                    <div class="space-y-2 mt-3">
+                        <div v-for="(badge, bIndex) in achievementBadges" :key="'badge-'+bIndex" class="badge-row">
+                            <div class="font-semibold text-sm">{{ badge.label }}</div>
+                            <div class="text-xs text-slate-400">{{ badge.hint }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-glass p-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Recent Activity</div>
+                            <div class="card-mini">latest actions in this session</div>
+                        </div>
+                    </div>
+                    <div class="activity-feed mt-3" v-if="activityLog.length">
+                        <div v-for="(item, i) in activityLog.slice(0, 8)" :key="'act-'+i" class="activity-item">{{ item }}</div>
+                    </div>
+                    <div v-else class="text-xs text-slate-500 mt-3">No actions yet. Add or complete a habit to see updates.</div>
+                </div>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'daily-goals'" class="space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="metric-card"><span>Daily Goals</span><strong>{{ totalHabits }}</strong><small>active goals</small></div>
+                <div class="metric-card"><span>Today Done</span><strong>{{ doneToday }}</strong><small>completed now</small></div>
+                <div class="metric-card"><span>Current Rate</span><strong>{{ overallProgress }}%</strong><small>month consistency</small></div>
+                <div class="metric-card"><span>Best Run</span><strong>{{ maxStreak }}</strong><small>day streak</small></div>
+            </div>
+
+            <div class="card-glass p-4">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Daily Goals Workspace</div>
+                        <div class="card-mini">Add, edit, and check goals for the current month</div>
+                    </div>
+                    <button class="quick-btn" style="width:auto;padding:8px 12px;margin-top:0;" @click="setView('daily')">Open Calendar Grid</button>
+                </div>
+                <div class="space-y-2 mt-4">
+                    <div v-for="(habit, idx) in activeData.dailyHabits" :key="'goal-'+idx" class="habit-row">
+                        <input v-model="habit.name" type="text" class="bg-transparent outline-none w-full" placeholder="Goal name">
+                        <input v-model.number="habit.goal" type="number" min="1" :max="daysInMonth" class="ctl-select goal-input" aria-label="Goal target days">
+                        <span class="chip chip-muted">{{ habitCompletedCount(habit) }}/{{ daysInMonth }}</span>
+                    </div>
+                </div>
+                <button class="quick-btn mt-4" @click="addDailyHabit">+ Add Goal</button>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'daily'" class="space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="metric-card"><span>Habits Tracked</span><strong>{{ totalHabits }}</strong></div>
+                <div class="metric-card"><span>Completed</span><strong>{{ totalHabitsCompleted }}</strong></div>
+                <div class="metric-card"><span>Possible</span><strong>{{ totalHabits * daysInMonth }}</strong></div>
+                <div class="metric-card"><span>Overall</span><strong>{{ overallProgress }}%</strong></div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass p-4 lg:col-span-2 overflow-auto hidden lg:block">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Daily Habits - {{ months[currentMonth] }} {{ currentYear }}</div>
+                            <div class="card-mini">Search, edit, clear, duplicate, or delete any habit</div>
+                        </div>
+                        <div class="topbar-actions">
+                            <input v-model="habitSearch" type="text" class="ctl-select" placeholder="Search habits...">
+                            <select v-model="habitSort" class="ctl-select" aria-label="Sort habits">
+                                <option value="manual">Sort: Manual</option>
+                                <option value="name">Sort: Name A-Z</option>
+                                <option value="high">Sort: Most Done</option>
+                                <option value="low">Sort: Least Done</option>
+                            </select>
+                            <button class="accent-btn" @click="setAllToday(true)">Mark Today All</button>
+                            <button class="accent-btn" @click="setAllToday(false)">Clear Today</button>
+                            <button class="accent-btn" @click="addDailyHabit">+ Habit</button>
+                        </div>
+                    </div>
+                    <table class="w-full text-xs min-w-[980px] mt-3">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-800">
+                            <th class="text-left p-2">Habit</th>
+                            <th class="text-left p-2">Progress</th>
+                            <th v-for="d in daysInMonth" :key="'hd-'+d" class="p-2 text-center">{{ d }}</th>
+                            <th class="text-center p-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(habit, hIndex) in sortedDailyHabits" :key="'daily-row-'+hIndex" class="border-b border-slate-900/80">
+                            <td class="p-2">
+                                <input v-model="habit.name" type="text" class="bg-transparent outline-none w-full" placeholder="Habit name" :aria-label="'Habit name for row ' + (hIndex + 1)">
+                            </td>
+                            <td class="p-2">
+                                <span :class="completionBadgeClass(Math.round((habitCompletedCount(habit) / Math.max(daysInMonth, 1)) * 100))">{{ Math.round((habitCompletedCount(habit) / Math.max(daysInMonth, 1)) * 100) }}%</span>
+                            </td>
+                            <td v-for="d in daysInMonth" :key="'c-'+hIndex+'-'+d" class="p-2 text-center">
+                                <input type="checkbox" class="chk-base" :class="getWeekChk(d)" v-model="habit.days[d-1]" @change="handleCheck($event, habit, d)" :aria-label="'Mark day ' + d + ' done for ' + (habit.name || 'habit')">
+                            </td>
+                            <td class="p-2 text-center">
+                                <div class="flex items-center justify-center gap-2">
+                                    <button class="chip chip-muted" @click="duplicateHabit(activeData.dailyHabits.indexOf(habit))" :aria-label="'Duplicate habit ' + (habit.name || 'habit')">Copy</button>
+                                    <button class="chip chip-warning" @click="clearHabit(activeData.dailyHabits.indexOf(habit))" :aria-label="'Clear all checks for ' + (habit.name || 'habit')">Clear</button>
+                                    <button class="chip chip-success" @click="removeHabit(activeData.dailyHabits.indexOf(habit))" :aria-label="'Delete habit ' + (habit.name || 'habit')">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                    </table>
+                </div>
+
+                <div class="card-glass p-4 space-y-4">
+                    <div>
+                        <div class="card-title">Month Notes</div>
+                        <div class="card-mini">Add reflections or targets for this month</div>
+                    </div>
+                    <textarea v-model="activeData.notes" @input="saveState()" rows="11" class="w-full rounded-xl bg-slate-950/80 border border-slate-800 text-slate-200 p-3 text-sm outline-none resize-none" placeholder="Write what matters this month..."></textarea>
+                    <button class="quick-btn" @click="saveState(true)">Save Notes</button>
+                </div>
+            </div>
+
+            <div class="space-y-3 lg:hidden">
+                <div v-for="(habit, hIndex) in sortedDailyHabits" :key="'daily-card-'+hIndex" class="habit-mobile-card card-glass">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <div class="font-semibold">{{ habit.name || 'Untitled Habit' }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ habitCompletedCount(habit) }}/{{ daysInMonth }} completed</div>
+                        </div>
+                        <button class="chip chip-success" @click="removeHabit(activeData.dailyHabits.indexOf(habit))">Delete</button>
+                    </div>
+                    <div class="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+                        <button v-for="d in daysInMonth" :key="'daily-chip-'+hIndex+'-'+d" class="day-chip" :class="habit.days[d-1] ? 'day-chip-on' : ''" @click="handleCheck({ target: { checked: !habit.days[d-1] } }, habit, d)" :aria-label="'Toggle day ' + d + ' for ' + (habit.name || 'habit')">{{ d }}</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'deep-work'" class="space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="metric-card"><span>Total Focus Time</span><strong>{{ deepWorkHoursLabel }}h</strong><small>{{ deepWorkMinutes }} minutes tracked</small></div>
+                <div class="metric-card"><span>Saved Sessions</span><strong>{{ deepWorkSessions }}</strong><small>deep work entries</small></div>
+                <div class="metric-card"><span>Current Stopwatch</span><strong>{{ formattedTime }}</strong><small>{{ timerRunning ? 'running' : 'paused' }}</small></div>
+                <div class="metric-card"><span>Active Topic</span><strong>{{ deepWorkTaskName || 'General' }}</strong><small>current session name</small></div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass p-4 lg:col-span-2">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Deep Work Stopwatch</div>
+                            <div class="card-mini">Name your work, run in background, then save as a session</div>
+                        </div>
+                    </div>
+                    <div class="deep-work-clock mt-4">{{ formattedTime }}</div>
+                    <label class="block mt-4">
+                        <span class="text-slate-400 text-xs uppercase">Session Topic</span>
+                        <input v-model="deepWorkTaskName" type="text" class="ctl-select w-full mt-2" placeholder="Example: Physics - Electromagnetism">
+                    </label>
+                    <div class="grid grid-cols-3 gap-2 mt-4">
+                        <button class="accent-btn" @click="toggleTimer">{{ timerRunning ? 'Pause' : 'Start' }}</button>
+                        <button class="accent-btn" @click="saveDeepWorkSession">Save Session</button>
+                        <button class="accent-btn" @click="resetTimer">Reset</button>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-3">Tip: the stopwatch uses timestamps, so it keeps accurate elapsed time even when this tab is in background.</div>
+                </div>
+
+                <div class="card-glass p-4">
+                    <div class="card-title">Topic Summary</div>
+                    <div class="space-y-2 mt-3" v-if="deepWorkByTopic.length">
+                        <div v-for="(topic, index) in deepWorkByTopic" :key="'topic-main-'+index" class="habit-row">
+                            <span class="text-sm">{{ topic.name }}</span>
+                            <span class="chip chip-success">{{ formatDuration(topic.seconds) }}</span>
+                        </div>
+                    </div>
+                    <div v-else class="text-xs text-slate-500 mt-3">No saved sessions yet.</div>
+                </div>
+            </div>
+
+            <div class="card-glass p-4 overflow-auto">
+                <div class="card-head">
+                    <div>
+                        <div class="card-title">Session History</div>
+                        <div class="card-mini">All deep work logs saved on this device</div>
+                    </div>
+                </div>
+                <table class="w-full text-sm mt-3 min-w-[760px]" v-if="recentDeepWorkSessions.length">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-800">
+                            <th class="text-left p-2">Topic</th>
+                            <th class="text-left p-2">When</th>
+                            <th class="text-center p-2">Duration</th>
+                            <th class="text-center p-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="session in recentDeepWorkSessions" :key="'deep-session-'+session.id" class="border-b border-slate-900/80">
+                            <td class="p-2 text-slate-200">{{ session.name }}</td>
+                            <td class="p-2 text-slate-400">{{ formatSessionDate(session.endedAt) }}</td>
+                            <td class="p-2 text-center"><span class="chip chip-muted">{{ formatDuration(session.seconds) }}</span></td>
+                            <td class="p-2 text-center">
+                                <button class="chip chip-warning" @click="deleteDeepWorkSession(session.id)">Delete</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div v-else class="empty-box mt-3">
+                    <div class="text-lg font-semibold text-slate-200">No deep work sessions yet</div>
+                    <div class="text-slate-400 text-sm">Start the stopwatch, add a topic, and save your first session.</div>
+                </div>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'weekly'" class="space-y-4">
+            <div class="card-glass p-4">
+                <div class="card-title">Weekly Habits - {{ months[currentMonth] }} {{ currentYear }}</div>
+                <div class="text-xs text-slate-400 mt-1">Track weekly habits with one check per week.</div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+                    <div v-for="(week, wIndex) in weeksArray" :key="'wk-badge-'+wIndex" class="week-pill">
+                        <div class="text-slate-300 text-xs">Wk {{ wIndex + 1 }}</div>
+                        <div class="text-xl font-black" :class="getTextColor(wIndex)">{{ getWeekPercentage(wIndex) }}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass p-4 overflow-auto lg:col-span-2 hidden lg:block">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Weekly Task Board</div>
+                            <div class="card-mini">Manage recurring tasks week by week</div>
+                        </div>
+                        <input v-model="weeklySearch" type="text" class="ctl-select" placeholder="Search tasks...">
+                    </div>
+                    <table class="w-full text-sm min-w-[760px] mt-3">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400">
+                            <th class="text-left p-2">Habit</th>
+                            <th v-for="(week, wIndex) in weeksArray" :key="'wk-head-'+wIndex" class="p-2 text-center">Wk {{ wIndex + 1 }}</th>
+                            <th class="p-2 text-center">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(habit, hIndex) in activeData.dailyHabits" :key="'wk-row-'+hIndex" class="border-b border-slate-900/80">
+                            <td class="p-2 text-slate-200">{{ habit.name || 'Untitled Habit' }}</td>
+                            <td v-for="(week, wIndex) in weeksArray" :key="'wk-cell-'+hIndex+'-'+wIndex" class="text-center p-2">
+                                <span class="chip chip-muted">{{ Math.round(week.days.filter(day => habit.days[day-1]).length / week.days.length * 100) }}%</span>
+                            </td>
+                            <td class="text-center p-2 text-slate-200">{{ habitCompletedCount(habit) }}</td>
+                        </tr>
+                    </tbody>
+                    </table>
+                </div>
+
+                <div class="card-glass p-4 space-y-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Task Lists</div>
+                            <div class="card-mini">Add, edit, and delete weekly tasks</div>
+                        </div>
+                    </div>
+                    <div v-for="(weekTasks, wIndex) in activeData.weeklyTasks" :key="'task-list-'+wIndex" class="space-y-2">
+                        <div class="card-head">
+                            <div class="card-mini text-[11px]">Week {{ wIndex + 1 }}</div>
+                            <div class="topbar-actions">
+                                <button class="chip chip-success" @click="markWeekTasks(wIndex, true)">Done All</button>
+                                <button class="chip chip-muted" @click="markWeekTasks(wIndex, false)">Reset</button>
+                            </div>
+                        </div>
+                        <div v-for="(task, tIndex) in weekTasks" :key="'task-'+wIndex+'-'+tIndex" class="habit-row" v-if="!weeklySearch || (task.name || '').toLowerCase().includes(weeklySearch.toLowerCase())">
+                            <input v-model="task.name" type="text" class="bg-transparent outline-none w-full text-sm" placeholder="Weekly task" :aria-label="'Task name for week ' + (wIndex + 1)">
+                            <div class="flex items-center gap-2 shrink-0">
+                                <input type="checkbox" class="chk-base chk-w1" v-model="task.done" @change="handleTaskCheck($event)" :aria-label="'Toggle weekly task ' + (task.name || 'task')">
+                                <button class="chip chip-warning" @click="removeWeeklyTask(wIndex, tIndex)" :aria-label="'Delete weekly task ' + (task.name || 'task')">Delete</button>
+                            </div>
+                        </div>
+                        <button class="quick-btn" @click="addWeeklyTask(wIndex)">+ Add Task</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-3 lg:hidden">
+                <div v-for="(weekTasks, wIndex) in filteredWeeklyTasks" :key="'wk-mobile-'+wIndex" class="card-glass p-4">
+                    <div class="card-head">
+                        <div>
+                            <div class="card-title">Week {{ wIndex + 1 }}</div>
+                            <div class="card-mini">{{ weekTasks.length }} tasks</div>
+                        </div>
+                    </div>
+                    <div class="space-y-2 mt-3">
+                        <div v-for="(task, tIndex) in weekTasks" :key="'wk-mobile-task-'+wIndex+'-'+tIndex" class="habit-row">
+                            <input v-model="task.name" type="text" class="bg-transparent outline-none w-full text-sm" placeholder="Weekly task">
+                            <input type="checkbox" class="chk-base chk-w1" v-model="task.done" @change="handleTaskCheck($event)">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'monthly'" class="card-glass p-5">
+            <div class="card-title">Monthly Habits</div>
+            <div v-if="!activeData.dailyHabits.length" class="empty-box mt-4">
+                <div class="text-lg font-semibold text-slate-200">No monthly habits yet</div>
+                <div class="text-slate-400 text-sm">Add monthly habits and track them year-round.</div>
+            </div>
+            <div v-else class="space-y-3 mt-4">
+                <div v-for="(habit, hIndex) in activeData.dailyHabits" :key="'month-h-'+hIndex" class="habit-month-row">
+                    <div>
+                        <div class="font-semibold">{{ habit.name || 'Untitled Habit' }}</div>
+                        <div class="text-xs text-slate-400">Goal: {{ habit.goal || daysInMonth }} checks</div>
+                    </div>
+                    <div class="w-44 bg-slate-900 rounded-full h-2.5 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-fuchsia-500 to-indigo-500" :style="{ width: Math.min(100, Math.round((habitCompletedCount(habit)/Math.max(habit.goal || daysInMonth, 1))*100)) + '%' }"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="card-title">Monthly Notes</div>
+                <textarea v-model="activeData.notes" @input="saveState()" rows="6" class="w-full mt-3 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-200 p-3 text-sm outline-none resize-none" placeholder="Write monthly reflections, goals, or reminders..."></textarea>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'yearly'" class="space-y-4">
+            <div class="grid lg:grid-cols-3 gap-4">
+                <div class="card-glass p-4 lg:col-span-2">
+                    <div class="card-title">Monthly Progress %</div>
+                    <div class="space-y-2 mt-4">
+                        <div v-for="(v, i) in monthlyProgressSeries" :key="'mp-'+i" class="flex items-center gap-3 text-xs">
+                            <span class="w-8 text-slate-400">{{ months[i].slice(0,3) }}</span>
+                            <div class="flex-1 h-2 rounded-full bg-slate-900 overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-fuchsia-500 to-cyan-400" :style="{ width: v + '%' }"></div>
+                            </div>
+                            <span class="w-10 text-right text-slate-300">{{ v }}%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-glass p-4 flex flex-col items-center justify-center">
+                    <div class="text-slate-400 text-xs uppercase">Yearly Progress</div>
+                    <div class="radial mt-3">{{ Math.round(monthlyProgressSeries.reduce((a,b)=>a+b,0)/12) }}%</div>
+                    <div class="text-xs text-slate-400 mt-2">Consistency</div>
+                </div>
+            </div>
+
+            <div class="card-glass p-4 overflow-auto">
+                <div class="card-title">Yearly Goals - {{ currentYear }}</div>
+                <table class="w-full text-sm mt-3 min-w-[720px]">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-800">
+                            <th class="text-left p-2">Goal</th>
+                            <th class="p-2 text-center">Jan</th>
+                            <th class="p-2 text-center">Feb</th>
+                            <th class="p-2 text-center">Mar</th>
+                            <th class="p-2 text-center">Apr</th>
+                            <th class="p-2 text-center">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in yearlyGoalRows" :key="'yr-'+row.id" class="border-b border-slate-900/80">
+                            <td class="p-2">{{ row.name }}</td>
+                            <td class="p-2 text-center"><span class="chip chip-muted">{{ Math.max(0,row.progress-18) }}%</span></td>
+                            <td class="p-2 text-center"><span class="chip chip-muted">{{ Math.max(0,row.progress-12) }}%</span></td>
+                            <td class="p-2 text-center"><span class="chip chip-muted">{{ Math.max(0,row.progress-6) }}%</span></td>
+                            <td class="p-2 text-center"><span class="chip chip-success">{{ row.progress }}%</span></td>
+                            <td class="p-2 text-center font-semibold">{{ row.progress }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section v-else-if="currentView === 'profile'" class="space-y-4">
+            <div class="hero card-glass">
+                <div>
+                    <div class="text-slate-200 text-xs uppercase">Account Overview</div>
+                    <div class="text-3xl font-black mt-1">My Profile</div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+                <div class="card-glass p-4">
+                    <div class="card-title">Personal Details</div>
+                    <div class="space-y-3 mt-4 text-sm">
+                        <label class="block">
+                            <span class="text-slate-400 text-xs uppercase">Name</span>
+                            <input v-model="profile.name" @input="saveProfile" type="text" class="ctl-select w-full mt-1" placeholder="Your name">
+                        </label>
+                        <label class="block">
+                            <span class="text-slate-400 text-xs uppercase">Email</span>
+                            <input v-model="profile.email" @input="saveProfile" type="text" class="ctl-select w-full mt-1" placeholder="Your email">
+                        </label>
+                        <div><span class="text-slate-400">Status:</span> Active Account</div>
+                    </div>
+                </div>
+                <div class="card-glass p-4">
+                    <div class="card-title">Account Summary</div>
+                    <div class="grid grid-cols-2 gap-3 mt-4">
+                        <div class="mini-kpi"><span>Habits</span><strong>{{ totalHabits }}</strong></div>
+                        <div class="mini-kpi"><span>Weekly</span><strong>{{ weeksArray.length }}</strong></div>
+                        <div class="mini-kpi"><span>Daily Goals</span><strong>3</strong></div>
+                        <div class="mini-kpi"><span>XP</span><strong>{{ userXP }}</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-glass p-4">
+                <div class="card-title">My Habits</div>
+                <div class="space-y-2 mt-4">
+                    <div v-for="(habit, idx) in activeData.dailyHabits" :key="'p-h-'+idx" class="habit-row">
+                        <span>{{ habit.name || 'Untitled Habit' }}</span>
+                        <span class="chip chip-muted">{{ habitCompletedCount(habit) }} done</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-glass p-4">
+                <div class="card-title">Backup & Sync</div>
+                <div class="text-slate-400 text-sm mt-2">Export your data file or import a backup to restore habits, profile details, and notes.</div>
+                <div class="flex flex-wrap gap-2 mt-4">
+                    <button class="accent-btn" @click="exportData">Export Backup</button>
+                    <label class="accent-btn cursor-pointer">
+                        Import Backup
+                        <input type="file" accept=".json" @change="importData" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <section v-else class="card-glass p-5">
+            <div class="card-title">{{ currentViewTitle }}</div>
+            <div class="text-slate-300 mt-3">This section is part of the redesigned shell. We can wire additional actions here next.</div>
+        </section>
+    </main>
+
+</div>
+
+<script type="module" src="./js/app.js"></script>
+
+</body>
+</html>
