@@ -2,6 +2,7 @@ import { MONTHS } from './constants.js';
 import { analyticsComputed, analyticsMethods } from './analytics.js';
 import { timerComputed, timerMethods } from './timer.js';
 import { storageMethods } from './storage.js';
+import { defaultSchedule } from './scheduleData.js';
 
 const { createApp } = window.Vue;
 
@@ -14,6 +15,7 @@ createApp({
             currentView: 'dashboard',
             mobileNavOpen: false,
             database: {},
+            classSchedule: JSON.parse(JSON.stringify(defaultSchedule)),
             activeData: { dailyHabits: [], weeklyTasks: [[], [], [], [], []], notes: '', moods: [] },
 
             userStats: { xp: 0, level: 1, deepWorkMinutes: 0, deepWorkSessions: 0, deepWorkTotalSeconds: 0, deepWorkLog: [], activeDeepWork: null },
@@ -56,6 +58,12 @@ createApp({
                     ]
                 },
                 {
+                    title: 'EDUCATION',
+                    items: [
+                        { key: 'classes', label: 'Classes', icon: 'ph-graduation-cap' }
+                    ]
+                },
+                {
                     title: 'HABITS',
                     items: [
                         { key: 'daily', label: 'Daily Habits', icon: 'ph-calendar-check' },
@@ -76,6 +84,25 @@ createApp({
         };
     },
     computed: {
+        classesToday() {
+            const today = new Date().toISOString().split('T')[0];
+            return (this.classSchedule || []).filter(c => c.date === today).sort((a,b) => a.time.localeCompare(b.time));
+        },
+        classesUpcoming() {
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            const endOfWeek = new Date(today);
+            endOfWeek.setDate(today.getDate() + 7);
+            const endOfWeekStr = endOfWeek.toISOString().split('T')[0];
+            return (this.classSchedule || []).filter(c => c.date > todayStr && c.date <= endOfWeekStr && !c.taken).sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        },
+        classesBacklog() {
+            const today = new Date().toISOString().split('T')[0];
+            return (this.classSchedule || []).filter(c => c.date < today && !c.taken).sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        },
+        classesCompleted() {
+            return (this.classSchedule || []).filter(c => c.taken).sort((a,b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+        },
         years() {
             const now = new Date().getFullYear();
             const min = Math.min(now - 5, this.currentYear - 1);
@@ -95,6 +122,7 @@ createApp({
                 dashboard: 'Dashboard',
                 'daily-goals': 'Daily Goals',
                 'deep-work': 'Deep Work',
+                classes: 'Classes Schedule',
                 daily: 'Daily Habits',
                 weekly: 'Weekly Habits',
                 monthly: 'Monthly Habits',
@@ -230,6 +258,32 @@ createApp({
         ...storageMethods,
         ...analyticsMethods,
         ...timerMethods,
+        addClassForm(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const newClass = {
+                id: 'cls-' + Date.now(),
+                name: formData.get('className'),
+                date: formData.get('classDate'),
+                time: formData.get('classTime'),
+                taken: false
+            };
+            this.classSchedule.push(newClass);
+            this.saveState();
+            e.target.reset();
+        },
+        removeClass(id) {
+            this.classSchedule = this.classSchedule.filter(c => c.id !== id);
+            this.saveState();
+        },
+        toggleClass(c) {
+            c.taken = !c.taken;
+            if (c.taken) {
+                this.addActivity(`Attended class: ${c.name}`);
+                this.addXP(5);
+            }
+            this.saveState();
+        },
         setView(viewKey) {
             this.currentView = viewKey;
             this.mobileNavOpen = false;

@@ -1,4 +1,5 @@
 import { getDefaultHabitsTemplate, getDefaultWeeklyTasksTemplate } from './constants.js';
+import { defaultSchedule } from './scheduleData.js';
 
 function deepClone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -128,6 +129,7 @@ export const storageMethods = {
         this.database[targetKey] = deepClone(this.activeData);
         localStorage.setItem('focusOS_DB', JSON.stringify({
             database: this.database,
+            classSchedule: this.classSchedule,
             userStats: this.userStats,
             profile: this.profile,
             settings: { isDarkMode: this.isDarkMode }
@@ -156,6 +158,7 @@ export const storageMethods = {
             try {
                 const parsed = JSON.parse(saved);
                 this.database = this.normalizeDatabase(parsed.database);
+                this.classSchedule = Array.isArray(parsed.classSchedule) && parsed.classSchedule.length > 0 ? parsed.classSchedule : deepClone(defaultSchedule);
                 this.userStats = this.normalizeUserStats(parsed.userStats);
                 this.profile = {
                     name: typeof parsed?.profile?.name === 'string' ? parsed.profile.name : this.profile.name,
@@ -167,6 +170,7 @@ export const storageMethods = {
             } catch (error) {
                 localStorage.removeItem('focusOS_DB');
                 this.database = {};
+                this.classSchedule = deepClone(defaultSchedule);
                 this.userStats = { xp: 0, level: 1, deepWorkMinutes: 0, deepWorkSessions: 0, deepWorkTotalSeconds: 0, deepWorkLog: [], activeDeepWork: null };
                 this.isDarkMode = false;
                 document.documentElement.classList.remove('dark');
@@ -180,6 +184,7 @@ export const storageMethods = {
     exportData() {
         const payload = {
             database: this.database,
+            classSchedule: this.classSchedule,
             userStats: this.userStats,
             profile: this.profile,
             settings: { isDarkMode: this.isDarkMode }

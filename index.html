@@ -604,6 +604,113 @@
             </div>
         </section>
 
+        <section v-else-if="currentView === 'classes'" class="space-y-6">
+            <div class="card-glass p-5">
+                <div class="card-head mb-4">
+                    <div class="card-title">Add New Class</div>
+                </div>
+                <form @submit.prevent="addClassForm" class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" name="className" class="ctl-input flex-1" placeholder="Class Name (e.g. Math 101)" required>
+                    <input type="date" name="classDate" class="ctl-input text-slate-300" required>
+                    <input type="time" name="classTime" class="ctl-input text-slate-300" required>
+                    <button type="submit" class="accent-btn" aria-label="Add Class">Add Class</button>
+                </form>
+            </div>
+
+            <div class="card-glass p-5">
+                <div class="card-head mb-4">
+                    <div class="card-title text-emerald-400">Today's Classes</div>
+                    <div class="chip chip-success">{{ classesToday.length }}</div>
+                </div>
+                <div v-if="classesToday.length === 0" class="text-sm text-slate-500 italic">No classes today.</div>
+                <div v-else class="space-y-2">
+                    <div v-for="c in classesToday" :key="c.id" class="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 transition-colors" :class="{'opacity-50': c.taken}">
+                        <div class="flex items-center gap-3">
+                            <button @click="toggleClass(c)" class="habit-check text-xl flex-shrink-0" :class="c.taken ? 'text-blue-500 border-blue-500' : 'text-slate-600 border-slate-700 hover:border-slate-500'">
+                                <i class="ph-fill" :class="c.taken ? 'ph-check-circle' : 'ph-circle'"></i>
+                            </button>
+                            <div>
+                                <div class="font-medium" :class="{'line-through text-slate-500': c.taken}">{{ c.name }}</div>
+                                <div class="text-xs text-slate-400">{{ c.time }}</div>
+                            </div>
+                        </div>
+                        <button @click="removeClass(c.id)" class="text-slate-500 hover:text-red-400 transition-colors" aria-label="Remove Class">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+                <div class="card-glass p-5">
+                    <div class="card-head mb-4">
+                        <div class="card-title text-cyan-400">Upcoming This Week</div>
+                        <div class="chip chip-warning">{{ classesUpcoming.length }}</div>
+                    </div>
+                    <div v-if="classesUpcoming.length === 0" class="text-sm text-slate-500 italic">No upcoming classes this week.</div>
+                    <div v-else class="space-y-2 max-h-80 overflow-auto pr-2">
+                        <div v-for="c in classesUpcoming" :key="c.id" class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50">
+                            <div>
+                                <div class="text-sm font-medium">{{ c.name }}</div>
+                                <div class="text-xs text-slate-400">{{ c.date }} at {{ c.time }}</div>
+                            </div>
+                            <button @click="removeClass(c.id)" class="text-slate-600 hover:text-red-400" aria-label="Remove Class">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-glass p-5">
+                    <div class="card-head mb-4">
+                        <div class="card-title text-rose-400">Backlog (Missed)</div>
+                        <div class="chip bg-rose-500/20 text-rose-400">{{ classesBacklog.length }}</div>
+                    </div>
+                    <div v-if="classesBacklog.length === 0" class="text-sm text-slate-500 italic">No missed classes! Great job!</div>
+                    <div v-else class="space-y-2 max-h-80 overflow-auto pr-2">
+                        <div v-for="c in classesBacklog" :key="c.id" class="flex items-center justify-between p-2 rounded-lg bg-rose-950/20 border border-rose-900/50">
+                            <div class="flex items-center gap-3">
+                                <button @click="toggleClass(c)" class="habit-check text-xl flex-shrink-0 text-slate-600 border-slate-700 hover:border-rose-400">
+                                    <i class="ph-fill ph-circle"></i>
+                                </button>
+                                <div>
+                                    <div class="text-sm font-medium text-slate-300">{{ c.name }}</div>
+                                    <div class="text-xs text-rose-500/70">Missed on {{ c.date }} at {{ c.time }}</div>
+                                </div>
+                            </div>
+                            <button @click="removeClass(c.id)" class="text-slate-600 hover:text-red-400" aria-label="Remove Class">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-glass p-5">
+                <div class="card-head mb-4">
+                    <div class="card-title text-emerald-400">Completed Classes</div>
+                    <div class="chip chip-success">{{ classesCompleted.length }}</div>
+                </div>
+                <div v-if="classesCompleted.length === 0" class="text-sm text-slate-500 italic">No completed classes yet.</div>
+                <div v-else class="space-y-2 max-h-60 overflow-auto pr-2">
+                    <div v-for="c in classesCompleted" :key="c.id" class="flex items-center justify-between p-2 rounded-lg bg-slate-900/30 opacity-70">
+                        <div class="flex items-center gap-3">
+                            <button @click="toggleClass(c)" class="habit-check text-xl flex-shrink-0 text-blue-500 border-blue-500">
+                                <i class="ph-fill ph-check-circle"></i>
+                            </button>
+                            <div>
+                                <div class="text-sm font-medium line-through text-slate-500">{{ c.name }}</div>
+                                <div class="text-xs text-slate-500">{{ c.date }} at {{ c.time }}</div>
+                            </div>
+                        </div>
+                        <button @click="removeClass(c.id)" class="text-slate-600 hover:text-red-400" aria-label="Remove Class">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <section v-else-if="currentView === 'profile'" class="space-y-4">
             <div class="hero card-glass">
                 <div>
